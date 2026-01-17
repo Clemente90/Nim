@@ -6,7 +6,7 @@ tinvalidborrow.nim(25, 3) Error: only a 'distinct' type can borrow `.`
 tinvalidborrow.nim(26, 3) Error: only a 'distinct' type can borrow `.`
 tinvalidborrow.nim(27, 1) Error: borrow proc without distinct type parameter is meaningless
 tinvalidborrow.nim(36, 1) Error: borrow with generic parameter is not supported
-tinvalidborrow.nim(41, 1) Error: borrow from proc return type mismatch: 'T'
+tinvalidborrow.nim(41, 1) Error: borrow from '[]' is not supported
 tinvalidborrow.nim(42, 1) Error: borrow from '[]=' is not supported
 '''
 """

@@ -1926,17 +1926,24 @@ proc addParams(c: PContext, n: PNode, kind: TSymKind) =
     else: illFormedAst(n, c.config)
 
 proc semBorrow(c: PContext, n: PNode, s: PSym) =
+  if sfBarrow in s.flags and s.name.s notin ["[]", "[]="]:
+    localError(c.config, n.info,
+      "barrow pragma is only supported for the '[]' and '[]=' operators")
+    return
   # search for the correct alias:
-  var (b, state) = searchForBorrowProc(c, c.currentScope.parent, s)
+  let allowBracketMagics = sfBarrow in s.flags
+  var (b, state) = searchForBorrowProc(c, c.currentScope.parent, s, allowBracketMagics)
   case state
   of bsMatch:
     # store the alias:
     n[bodyPos] = newSymNode(b)
     # Carry over the original symbol magic, this is necessary in order to ensure
     # the semantic pass is correct
-    s.magic = b.magic
+    if sfBarrow notin s.flags or b.magic notin {mArrGet, mArrPut}:
+      s.magic = b.magic
     if b.typ != nil and b.typ.len > 0:
-      s.typ.n[0] = b.typ.n[0]
+      if sfBarrow notin s.flags or b.magic notin {mArrGet, mArrPut}:
+        s.typ.n[0] = b.typ.n[0]
     s.typ.flags = b.typ.flags
   of bsNoDistinct:
     localError(c.config, n.info, "borrow proc without distinct type parameter is meaningless")
@@ -2552,7 +2559,7 @@ proc semProcAux(c: PContext, n: PNode, kind: TSymKind,
   if not hasProto:
     implicitPragmas(c, s, n.info, validPragmas)
 
-  if n[pragmasPos].kind != nkEmpty and sfBorrow notin s.flags:
+  if n[pragmasPos].kind != nkEmpty and {sfBorrow, sfBarrow} * s.flags == {}:
     setEffectsForProcType(c.graph, s.typ, n[pragmasPos], s)
   s.typ.incl tfEffectSystemWorkaround
 
@@ -2613,7 +2620,7 @@ proc semProcAux(c: PContext, n: PNode, kind: TSymKind,
         localError(c.config, n.info, "the overloaded " & s.name.s &
           " operator has to be enabled with {.experimental: \"callOperator\".}")
 
-  if sfBorrow in s.flags and c.config.cmd notin cmdDocLike:
+  if {sfBorrow, sfBarrow} * s.flags != {} and c.config.cmd notin cmdDocLike:
     result[bodyPos] = c.graph.emptyNode
 
   if sfCppMember * s.flags != {} and sfWasForwarded notin s.flags:
@@ -2679,14 +2686,14 @@ proc semProcAux(c: PContext, n: PNode, kind: TSymKind,
   else:
     if s.kind == skMethod: semMethodPrototype(c, s, n)
     if hasProto: localError(c.config, n.info, errImplOfXexpected % proto.name.s)
-    if {sfImportc, sfBorrow, sfError} * s.flags == {} and s.magic == mNone:
+    if {sfImportc, sfBorrow, sfBarrow, sfError} * s.flags == {} and s.magic == mNone:
       # this is a forward declaration and we're building the prototype
       if s.kind in {skProc, skFunc} and s.typ.returnType != nil and s.typ.returnType.kind == tyAnything:
         localError(c.config, n[paramsPos][0].info, "return type 'auto' cannot be used in forward declarations")
 
       incl(s, sfForward)
       incl(s, sfWasForwarded)
-    elif sfBorrow in s.flags: semBorrow(c, n, s)
+    elif {sfBorrow, sfBarrow} * s.flags != {}: semBorrow(c, n, s)
   sideEffectsCheck(c, s)
 
   closeScope(c)           # close scope for parameters

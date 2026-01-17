@@ -1576,7 +1576,7 @@ proc requestConstImpl(p: BProc, sym: PSym) =
 proc isActivated(prc: PSym): bool = prc.typ != nil
 
 proc genProc(m: BModule, prc: PSym) =
-  if sfBorrow in prc.flags or not isActivated(prc): return
+  if {sfBorrow, sfBarrow} * prc.flags != {} or not isActivated(prc): return
   if sfForward in prc.flags:
     addForwardedProc(m, prc)
     fillProcLoc(m, prc.ast[namePos])

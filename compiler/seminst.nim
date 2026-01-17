@@ -137,7 +137,7 @@ proc instantiateBody(c: PContext, n, params: PNode, result, orig: PSym) =
           idTablePut(symMap, params[i].sym, result.typ.n[param.position+1].sym)
     freshGenSyms(c, b, result, orig, symMap)
 
-    if sfBorrow notin orig.flags:
+    if {sfBorrow, sfBarrow} * orig.flags == {}:
       # We do not want to generate a body for generic borrowed procs.
       # As body is a sym to the borrowed proc.
       let resultType = # todo probably refactor it into a function
