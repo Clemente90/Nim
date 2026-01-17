@@ -1694,6 +1694,11 @@ proc semSubscript(c: PContext, n: PNode, flags: TExprFlags, afterOverloading = f
   n[0] = semExprWithType(c, n[0], {efNoEvaluateGeneric, efAllowSymChoice})
   var arr = skipTypes(n[0].typ, {tyGenericInst, tyUserTypeClassInst, tyOwned,
                                       tyVar, tyLent, tyPtr, tyRef, tyAlias, tySink})
+  if afterOverloading and arr.kind == tyDistinct:
+    while arr.kind == tyDistinct:
+      arr = arr.elementType
+    arr = skipTypes(arr, {tyGenericInst, tyUserTypeClassInst, tyOwned,
+                          tyVar, tyLent, tyPtr, tyRef, tyAlias, tySink})
   if arr.kind == tyStatic:
     if arr.base.kind == tyNone:
       result = n
