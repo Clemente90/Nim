@@ -32,7 +32,7 @@ const
   procPragmas* = declPragmas + {FirstCallConv..LastCallConv,
     wMagic, wNoSideEffect, wSideEffect, wNoreturn, wNosinks, wDynlib, wHeader,
     wCompilerProc, wNonReloadable, wCore, wProcVar, wVarargs, wCompileTime,
-    wBorrow, wImportCompilerProc, wThread,
+    wBorrow, wBarrow, wImportCompilerProc, wThread,
     wAsmNoStackFrame, wDiscardable, wNoInit, wCodegenDecl,
     wGensym, wInject, wRaises, wEffectsOf, wTags, wForbids, wLocks, wDelegator, wGcSafe,
     wConstructor, wLiftLocals, wStackTrace, wLineTrace, wNoDestroy,
@@ -45,7 +45,7 @@ const
     wMagic, wNoSideEffect, wCompilerProc, wNonReloadable, wCore,
     wDiscardable, wGensym, wInject, wDelegator}
   iteratorPragmas* = declPragmas + {FirstCallConv..LastCallConv, wNoSideEffect, wSideEffect,
-    wMagic, wBorrow,
+    wMagic, wBorrow, wBarrow,
     wDiscardable, wGensym, wInject, wRaises, wEffectsOf,
     wTags, wForbids, wLocks, wGcSafe, wRequires, wEnsures}
   exprPragmas* = {wLine, wLocks, wNoRewrite, wGcSafe, wNoSideEffect}
@@ -1077,6 +1077,13 @@ proc singlePragma(c: PContext, sym: PSym, n: PNode, i: var int,
         else:
           noVal(c, it)
           incl(sym, sfBorrow)
+      of wBarrow:
+        if sym.kind == skType:
+          localError(c.config, it.info, "barrow pragma is only supported for routines")
+        else:
+          noVal(c, it)
+          incl(sym, sfBorrow)
+          incl(sym, sfBarrow)
       of wFinal:
         noVal(c, it)
         if sym.typ == nil: invalidPragma(c, it)

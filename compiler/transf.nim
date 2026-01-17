@@ -134,13 +134,14 @@ proc transformSymAux(c: PTransf, n: PNode): PNode =
   #  if not c.tooEarly:
   var b: PNode
   var tc = c.transCon
-  if sfBorrow in s.flags and s.kind in routineKinds:
+  if {sfBorrow, sfBarrow} * s.flags != {} and s.kind in routineKinds:
     # simply exchange the symbol:
     var s = s
     while true:
       # Skips over all borrowed procs getting the last proc symbol without an implementation
       let body = getBody(c.graph, s)
-      if body.kind == nkSym and sfBorrow in body.sym.flags and getBody(c.graph, body.sym).kind == nkSym:
+      if body.kind == nkSym and {sfBorrow, sfBarrow} * body.sym.flags != {} and
+          getBody(c.graph, body.sym).kind == nkSym:
         s = body.sym
       else:
         break

@@ -1318,7 +1318,7 @@ proc genSeqElem(p: BProc, n, x, y: PNode, d: var TLoc) =
   putIntoDest(p, d, n, subscript(dataField(p, ra), rcb), a.storage)
 
 proc genBracketExpr(p: BProc; n: PNode; d: var TLoc) =
-  var ty = skipTypes(n[0].typ, abstractVarRange + tyUserTypeClasses)
+  var ty = skipTypes(n[0].typ, abstractVarRange + tyUserTypeClasses + {tyDistinct})
   if ty.kind in {tyRef, tyPtr}: ty = skipTypes(ty.elementType, abstractVarRange)
   case ty.kind
   of tyUncheckedArray: genUncheckedArrayElem(p, n, n[0], n[1], d)
@@ -2854,6 +2854,22 @@ proc genEnumToStr(p: BProc, e: PNode, d: var TLoc) =
 
 proc genMagicExpr(p: BProc, e: PNode, d: var TLoc, op: TMagic) =
   case op
+  of mArrGet:
+    var bracket = newNodeI(nkBracketExpr, e.info)
+    for i in 1..<e.len:
+      bracket.add(e[i])
+    bracket.typ = e.typ
+    genBracketExpr(p, bracket, d)
+  of mArrPut:
+    var bracket = newNodeI(nkBracketExpr, e.info)
+    bracket.add(e[1])
+    for i in 2..<e.len-1:
+      bracket.add(e[i])
+    bracket.typ = e[1].typ
+    var asgn = newNodeI(nkAsgn, e.info, 2)
+    asgn[0] = bracket
+    asgn[1] = e[^1]
+    expr(p, asgn, d)
   of mOr, mAnd: genAndOr(p, e, d, op)
   of mNot..mUnaryMinusF64: unaryArith(p, e, d, op)
   of mUnaryMinusI..mAbsI: unaryArithOverflow(p, e, d, op)

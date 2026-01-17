@@ -1235,6 +1235,7 @@ proc genFlags*(s: set[TSymFlag]; dest: var string) =
     of sfConstructor: dest.add "c2"
     of sfDispatcher: dest.add "d1"
     of sfBorrow: dest.add "b"
+    of sfBarrow: dest.add "b2"
     of sfInfixCall: dest.add "i0"
     of sfNamedParamCall: dest.add "n1"
     of sfDiscardable: dest.add "d2"
@@ -1287,6 +1288,9 @@ proc parse*(t: typedesc[TSymFlag]; s: string): set[TSymFlag] =
         inc i
       elif i+1 < s.len and s[i+1] == '1':
         result.incl sfBase
+        inc i
+      elif i+1 < s.len and s[i+1] == '2':
+        result.incl sfBarrow
         inc i
       else: result.incl sfBorrow
     of 'c':
@@ -1860,4 +1864,3 @@ proc parse*(t: typedesc[TOption]; s: string): set[TOption] =
     of 'w': result.incl optWarns
     else: discard
     inc i
-

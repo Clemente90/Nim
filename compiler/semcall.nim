@@ -1016,7 +1016,8 @@ proc explicitGenericInstantiation(c: PContext, n: PNode, s: PSym, doError: bool)
     else:
       result = nil
 
-proc searchForBorrowProc(c: PContext, startScope: PScope, fn: PSym): tuple[s: PSym, state: TBorrowState] =
+proc searchForBorrowProc(c: PContext, startScope: PScope, fn: PSym,
+                         allowBracketMagics: bool): tuple[s: PSym, state: TBorrowState] =
   # Searches for the fn in the symbol table. If the parameter lists are suitable
   # for borrowing the sym in the symbol table is returned, else nil.
   # New approach: generate fn(x, y, z) where x, y, z have the proper types
@@ -1064,10 +1065,12 @@ proc searchForBorrowProc(c: PContext, startScope: PScope, fn: PSym): tuple[s: PS
     if resolved != nil:
       result.s = resolved[0].sym
       result.state = bsMatch
-      if not compareTypes(result.s.typ.returnType, fn.typ.returnType, dcEqIgnoreDistinct, {IgnoreFlags}):
+      if result.s.magic in {mArrPut, mArrGet}:
+        if not allowBracketMagics:
+          # cannot borrow these magics without `.barrow`
+          result.state = bsNotSupported
+      elif not compareTypes(result.s.typ.returnType, fn.typ.returnType,
+                            dcEqIgnoreDistinct, {IgnoreFlags}):
         result.state = bsReturnNotMatch
-      elif result.s.magic in {mArrPut, mArrGet}:
-        # cannot borrow these magics for now
-        result.state = bsNotSupported
   else:
     result.state = bsNoDistinct

@@ -85,6 +85,7 @@ type
     sfDispatcher,     # copied method symbol is the dispatcher
                       # deprecated and unused, except for the con
     sfBorrow,         # proc is borrowed
+    sfBarrow,         # proc is borrowed for bracket operators
     sfInfixCall,      # symbol needs infix call syntax in target language;
                       # for interfacing with C++, JS
     sfNamedParamCall, # symbol needs named parameter call syntax in target
