@@ -1044,16 +1044,17 @@ proc searchForBorrowProc(c: PContext, startScope: PScope, fn: PSym): tuple[s: PS
       # We want to skip the `Foo` to get `int`
     ]#
     t = skipTypes(param.typ, desiredTypes)
-    isDistinct = t.kind == tyDistinct or param.typ.kind == tyDistinct
-    if t.kind == tyGenericInvocation and t.genericHead.last.kind == tyDistinct:
-      result.state = bsGeneric
-      return
+    var baseType = t
+    if baseType.kind in {tyGenericInst, tyGenericInvocation} and
+        baseType.genericHead.last.kind == tyDistinct:
+      baseType = baseType.genericHead.last
+    isDistinct = baseType.kind == tyDistinct or param.typ.kind == tyDistinct
     if isDistinct: hasDistinct = true
     if param.typ.kind == tyVar:
       x = newTypeS(param.typ.kind, c)
-      x.addSonSkipIntLit(getType(isDistinct, t), c.idgen)
+      x.addSonSkipIntLit(getType(isDistinct, baseType), c.idgen)
     else:
-      x = getType(isDistinct, t)
+      x = getType(isDistinct, baseType)
     var s = copySym(param.sym, c.idgen)
     s.typ = x
     s.info = param.info
@@ -1064,10 +1065,11 @@ proc searchForBorrowProc(c: PContext, startScope: PScope, fn: PSym): tuple[s: PS
     if resolved != nil:
       result.s = resolved[0].sym
       result.state = bsMatch
-      if not compareTypes(result.s.typ.returnType, fn.typ.returnType, dcEqIgnoreDistinct, {IgnoreFlags}):
-        result.state = bsReturnNotMatch
-      elif result.s.magic in {mArrPut, mArrGet}:
-        # cannot borrow these magics for now
-        result.state = bsNotSupported
+      if result.s.magic notin {mArrGet, mArrPut}:
+        let resolvedReturn =
+          if resolved.typ != nil: resolved.typ
+          else: result.s.typ.returnType
+        if not compareTypes(resolvedReturn, fn.typ.returnType, dcEqIgnoreDistinct, {IgnoreFlags}):
+          result.state = bsReturnNotMatch
   else:
     result.state = bsNoDistinct
