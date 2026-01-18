@@ -754,8 +754,21 @@ proc typeBorrow(c: PContext; sym: PSym, n: PNode) =
   if n.kind in nkPragmaCallKinds and n.len == 2:
     let it = n[1]
     if it.kind != nkAccQuoted:
-      localError(c.config, n.info, "a type can only borrow `.` for now")
-  incl(sym.typ, tfBorrowDot)
+      localError(c.config, n.info, "a type can only borrow `.` or `[]` for now")
+      return
+    let ident = considerQuotedIdent(c, it)
+    template markBorrowFlag(flag: TTypeFlag) =
+      incl(sym.typ, flag)
+      if sym.typ.kind == tyGenericBody and sym.typ.typeBodyImpl.kind == tyDistinct:
+        incl(sym.typ.typeBodyImpl, flag)
+    case ident.s
+    of ".":
+      markBorrowFlag(tfBorrowDot)
+    of "[]":
+      markBorrowFlag(tfBorrowBrackets)
+    else:
+      localError(c.config, n.info, "a type can only borrow `.` or `[]` for now")
+      return
 
 proc markCompilerProc(c: PContext; s: PSym) =
   # minor hack ahead: FlowVar is the only generic .compilerproc type which

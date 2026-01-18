@@ -3,10 +3,7 @@ This testcase checks that bracket operators can be borrowed on distinct arrays.
 ]##
 
 type
-  Vec4[T] = distinct array[4, T]
-
-proc `[]`*[T](v: Vec4[T], i: int): T {.borrow.}
-proc `[]`*[T](v: var Vec4[T], i: int): var T {.borrow.}
+  Vec4[T] {.borrow: `[]`.} = distinct array[4, T]
 
 block:
   var v: Vec4[float32]

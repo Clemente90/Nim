@@ -1723,6 +1723,14 @@ proc typeSectionRightSidePass(c: PContext, n: PNode) =
         if not (t.kind == tyDistinct and tfBorrowDot in t.flags):
           excl s.typ, tfBorrowDot
           localError(c.config, name.info, "only a 'distinct' type can borrow `.`")
+    if tfBorrowBrackets in s.typ.flags:
+      let body = s.typ.skipTypes({tyGenericBody})
+      if body.kind != tyDistinct:
+        # flag might be copied from alias/instantiation:
+        let t = body.skipTypes({tyAlias, tyGenericInst})
+        if not (t.kind == tyDistinct and tfBorrowBrackets in t.flags):
+          excl s.typ, tfBorrowBrackets
+          localError(c.config, name.info, "only a 'distinct' type can borrow `[]`")
     let aa = a[2]
     if aa.kind in {nkRefTy, nkPtrTy} and aa.len == 1 and
        aa[0].kind == nkObjectTy and not preserveSym:
@@ -1936,7 +1944,8 @@ proc semBorrow(c: PContext, n: PNode, s: PSym) =
     # the semantic pass is correct
     s.magic = b.magic
     if b.typ != nil and b.typ.len > 0:
-      s.typ.n[0] = b.typ.n[0]
+      if b.magic notin {mArrGet, mArrPut}:
+        s.typ.n[0] = b.typ.n[0]
     s.typ.flags = b.typ.flags
   of bsNoDistinct:
     localError(c.config, n.info, "borrow proc without distinct type parameter is meaningless")
