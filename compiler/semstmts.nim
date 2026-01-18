@@ -1715,14 +1715,16 @@ proc typeSectionRightSidePass(c: PContext, n: PNode) =
       elif s.typ.kind == tyGenericBody:
         localError(c.config, name.info, "{.exportc.} not allowed for generic types")
 
-    if tfBorrowDot in s.typ.flags:
+    if tfBorrowDot in s.typ.flags or tfBorrowBrackets in s.typ.flags:
       let body = s.typ.skipTypes({tyGenericBody})
       if body.kind != tyDistinct:
         # flag might be copied from alias/instantiation:
         let t = body.skipTypes({tyAlias, tyGenericInst})
-        if not (t.kind == tyDistinct and tfBorrowDot in t.flags):
-          excl s.typ, tfBorrowDot
-          localError(c.config, name.info, "only a 'distinct' type can borrow `.`")
+        if not (t.kind == tyDistinct and
+            ({tfBorrowDot, tfBorrowBrackets} * t.flags) != {}):
+          excl(s.typ, tfBorrowDot)
+          excl(s.typ, tfBorrowBrackets)
+          localError(c.config, name.info, "only a 'distinct' type can borrow `.` or `[]`")
     let aa = a[2]
     if aa.kind in {nkRefTy, nkPtrTy} and aa.len == 1 and
        aa[0].kind == nkObjectTy and not preserveSym:
@@ -1935,9 +1937,17 @@ proc semBorrow(c: PContext, n: PNode, s: PSym) =
     # Carry over the original symbol magic, this is necessary in order to ensure
     # the semantic pass is correct
     s.magic = b.magic
-    if b.typ != nil and b.typ.len > 0:
+    if b.typ != nil and b.typ.len > 0 and b.magic notin {mArrGet, mArrPut}:
       s.typ.n[0] = b.typ.n[0]
     s.typ.flags = b.typ.flags
+    if s.name.s in ["[]", "[]="]:
+      for i in 1..<s.typ.n.len:
+        let paramType = s.typ.n[i].sym.typ.skipTypes(abstractVar)
+        if paramType.kind == tyDistinct:
+          incl(paramType, tfBorrowBrackets)
+        elif paramType.kind in {tyGenericInst, tyGenericInvocation} and
+            paramType.genericHead.last.kind == tyDistinct:
+          incl(paramType.genericHead.last, tfBorrowBrackets)
   of bsNoDistinct:
     localError(c.config, n.info, "borrow proc without distinct type parameter is meaningless")
   of bsReturnNotMatch:
