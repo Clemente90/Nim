@@ -1703,6 +1703,8 @@ proc semSubscript(c: PContext, n: PNode, flags: TExprFlags, afterOverloading = f
       return semSubscript(c, arr.n, flags, afterOverloading)
     else:
       arr = arr.base
+  while tfBorrowBrackets in arr.flags:
+    arr = arr.skipTypes({tyDistinct, tyGenericInst, tyAlias})
 
   case arr.kind
   of tyArray, tyOpenArray, tyVarargs, tySequence, tyString, tyCstring,

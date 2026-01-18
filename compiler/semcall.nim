@@ -1026,9 +1026,31 @@ proc searchForBorrowProc(c: PContext, startScope: PScope, fn: PSym): tuple[s: PS
   template getType(isDistinct: bool; t: PType):untyped =
     if isDistinct: t.baseOfDistinct(c.graph, c.idgen) else: t
 
+  proc returnTypeMatches(baseType, borrowedType: PType): bool =
+    if baseType == nil or borrowedType == nil:
+      return true
+    if containsGenericType(baseType) or containsGenericType(borrowedType):
+      return true
+    if compareTypes(baseType, borrowedType, dcEqIgnoreDistinct, {IgnoreFlags}):
+      return true
+    let baseSkip = baseType.skipTypes({tyDistinct, tyAlias, tyGenericInst})
+    let borrowedSkip = borrowedType.skipTypes({tyDistinct, tyAlias, tyGenericInst})
+    if baseSkip.kind == borrowedSkip.kind:
+      case baseSkip.kind
+      of tyGenericParam:
+        return true
+      of tyVar, tyLent, tySink:
+        let baseElem = baseSkip.elementType.skipTypes({tyDistinct, tyAlias, tyGenericInst})
+        let borrowedElem = borrowedSkip.elementType.skipTypes({tyDistinct, tyAlias, tyGenericInst})
+        return baseElem.kind == tyGenericParam and borrowedElem.kind == tyGenericParam
+      else:
+        discard
+    return false
+
   result = default(tuple[s: PSym, state: TBorrowState])
   var call = newNodeI(nkCall, fn.info)
   var hasDistinct = false
+  let isBracketOp = fn.name.s in ["[]", "[]="]
   var isDistinct: bool
   var x: PType
   var t: PType
@@ -1046,8 +1068,8 @@ proc searchForBorrowProc(c: PContext, startScope: PScope, fn: PSym): tuple[s: PS
     t = skipTypes(param.typ, desiredTypes)
     isDistinct = t.kind == tyDistinct or param.typ.kind == tyDistinct
     if t.kind == tyGenericInvocation and t.genericHead.last.kind == tyDistinct:
-      result.state = bsGeneric
-      return
+      isDistinct = true
+      hasDistinct = true
     if isDistinct: hasDistinct = true
     if param.typ.kind == tyVar:
       x = newTypeS(param.typ.kind, c)
@@ -1064,10 +1086,8 @@ proc searchForBorrowProc(c: PContext, startScope: PScope, fn: PSym): tuple[s: PS
     if resolved != nil:
       result.s = resolved[0].sym
       result.state = bsMatch
-      if not compareTypes(result.s.typ.returnType, fn.typ.returnType, dcEqIgnoreDistinct, {IgnoreFlags}):
-        result.state = bsReturnNotMatch
-      elif result.s.magic in {mArrPut, mArrGet}:
-        # cannot borrow these magics for now
-        result.state = bsNotSupported
+      if not isBracketOp and not returnTypeMatches(result.s.typ.returnType, fn.typ.returnType):
+        if not fn.ast[genericParamsPos].isGenericParams:
+          result.state = bsReturnNotMatch
   else:
     result.state = bsNoDistinct
