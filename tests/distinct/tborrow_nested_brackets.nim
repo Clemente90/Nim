@@ -6,16 +6,12 @@ seq/table/array types.
 ]##
 
 type
-  NestedArray = distinct array[2, float]
+  NestedArray {.borrow: `[]`.} = distinct array[2, float]
   NestedTable = distinct Table[int, NestedArray]
-  NestedSeq = distinct seq[NestedTable]
+  NestedSeq {.borrow: `[]`.} = distinct seq[NestedTable]
 
-proc `[]`*(s: NestedSeq, i: int): NestedTable {.borrow.}
-proc `[]`*(s: var NestedSeq, i: int): var NestedTable {.borrow.}
-proc `[]`*(t: NestedTable, key: int): NestedArray {.borrow.}
+proc `[]`*(t: NestedTable, key: int): lent NestedArray {.borrow.}
 proc `[]`*(t: var NestedTable, key: int): var NestedArray {.borrow.}
-proc `[]`*(a: NestedArray, i: int): float {.borrow.}
-proc `[]`*(a: var NestedArray, i: int): var float {.borrow.}
 
 block:
   var baseTable: Table[int, NestedArray]
