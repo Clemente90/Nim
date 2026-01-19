@@ -1071,11 +1071,28 @@ proc searchForBorrowProc(c: PContext, startScope: PScope, fn: PSym): tuple[s: PS
     call.add(newSymNode(s))
   if hasDistinct:
     let filter = if fn.kind in {skProc, skFunc}: {skProc, skFunc} else: {fn.kind}
+    block:
+      var choice = newNodeIT(nkClosedSymChoice, call.info, newTypeS(tyNone, c))
+      var o: TOverloadIter = default(TOverloadIter)
+      var symx = initOverloadIter(o, c, call[0])
+      while symx != nil:
+        if symx.kind in filter and sfBorrow notin symx.flags and symx != fn:
+          choice.add newSymNode(symx, call.info)
+        symx = nextOverloadIter(o, c, call[0])
+      if choice.len > 0:
+        call[0] = choice
     var resolved = semOverloadedCall(c, call, call, filter, {})
     if resolved != nil:
       result.s = resolved[0].sym
       result.state = bsMatch
-      if result.s.magic notin {mArrGet, mArrPut} and
+      let magicSym =
+        if result.s.magic == mNone and result.s.instantiatedFrom != nil:
+          result.s.instantiatedFrom
+        else:
+          result.s
+      if fn.name.s notin ["[]", "[]="] and
+          magicSym.magic notin {mArrGet, mArrPut} and
+          not containsUnresolvedType(result.s.typ.returnType) and
           not compareTypes(result.s.typ.returnType, fn.typ.returnType, dcEqIgnoreDistinct, {IgnoreFlags}):
         result.state = bsReturnNotMatch
   else:

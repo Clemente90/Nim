@@ -1694,8 +1694,16 @@ proc semSubscript(c: PContext, n: PNode, flags: TExprFlags, afterOverloading = f
   n[0] = semExprWithType(c, n[0], {efNoEvaluateGeneric, efAllowSymChoice})
   var arr = skipTypes(n[0].typ, {tyGenericInst, tyUserTypeClassInst, tyOwned,
                                       tyVar, tyLent, tyPtr, tyRef, tyAlias, tySink})
-  while tfBorrowBrackets in arr.flags:
-    arr = arr.skipTypes({tyDistinct, tyGenericInst, tyAlias})
+  while true:
+    if tfBorrowBrackets in arr.flags:
+      arr = arr.skipTypes({tyDistinct, tyGenericInst, tyAlias})
+      continue
+    if arr.kind in {tyGenericInvocation, tyGenericInst}:
+      let head = arr.genericHead
+      if head.last.kind == tyDistinct and tfBorrowBrackets in head.last.flags:
+        arr = head.last.elementType
+        continue
+    break
   if arr.kind == tyStatic:
     if arr.base.kind == tyNone:
       result = n
