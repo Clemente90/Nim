@@ -39,14 +39,31 @@ doAssert compiles(a2[0] == 0)
 var a3: A3[int]
 doAssert not compiles(a3[0] == 0)
 
+# Multiple distinct types borrowing brackets should not interfere.
+type B0 = distinct array[2, int]
+type B1 = distinct array[2, int]
+
+proc `[]`*(a: B0, i: int): int {.borrow.}
+proc `[]`*(a: var B0, i: int): var int {.borrow.}
+proc `[]=`*(a: var B0, i: int, val: int) {.borrow.}
+
+proc `[]`*(a: B1, i: int): int {.borrow.}
+proc `[]`*(a: var B1, i: int): var int {.borrow.}
+proc `[]=`*(a: var B1, i: int, val: int) {.borrow.}
+
+var b0: B0
+var b1: B1
+doAssert compiles(b0[0] == 0)
+doAssert compiles(b1[0] == 0)
+
 # See 4.
 block BLOCK_TEST:
   type A4[T] = distinct array[3, T]
   type A5[T] = distinct array[3, T]
 
-  proc `[]`*[T](a: A4[T], i: int): T {.borrow.}
-  proc `[]`*[T](a: var A4[T], i: int): var T {.borrow.}
-  proc `[]=`*[T](a: var A4[T], i: int, val: T) {.borrow.}
+  proc `[]`[T](a: A4[T], i: int): T {.borrow.}
+  proc `[]`[T](a: var A4[T], i: int): var T {.borrow.}
+  proc `[]=`[T](a: var A4[T], i: int, val: T) {.borrow.}
 
   var a4: A4[float]
   doAssert compiles(a4[0] == 0)

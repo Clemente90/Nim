@@ -1715,24 +1715,15 @@ proc typeSectionRightSidePass(c: PContext, n: PNode) =
       elif s.typ.kind == tyGenericBody:
         localError(c.config, name.info, "{.exportc.} not allowed for generic types")
 
-    let borrowFlags = {tfBorrowDot, tfBorrowBrackets}
+    let borrowFlags = {tfBorrowDot}
     if borrowFlags * s.typ.flags != {}:
       let body = s.typ.skipTypes({tyGenericBody})
       if body.kind != tyDistinct:
         # flag might be copied from alias/instantiation:
         let t = body.skipTypes({tyAlias, tyGenericInst})
         if not (t.kind == tyDistinct and borrowFlags * t.flags != {}):
-          let hasDot = tfBorrowDot in s.typ.flags
-          let hasBrackets = tfBorrowBrackets in s.typ.flags
           excl s.typ, borrowFlags
-          let msg =
-            if hasDot and not hasBrackets:
-              "only a 'distinct' type can borrow `.`"
-            elif hasBrackets and not hasDot:
-              "only a 'distinct' type can borrow `[]`"
-            else:
-              "only a 'distinct' type can borrow operators"
-          localError(c.config, name.info, msg)
+          localError(c.config, name.info, "only a 'distinct' type can borrow `.`")
     let aa = a[2]
     if aa.kind in {nkRefTy, nkPtrTy} and aa.len == 1 and
        aa[0].kind == nkObjectTy and not preserveSym:
@@ -1942,18 +1933,28 @@ proc semBorrow(c: PContext, n: PNode, s: PSym) =
   of bsMatch:
     # store the alias:
     n[bodyPos] = newSymNode(b)
+    let isBracketOp = s.name.s in ["[]", "[]="]
     # Carry over the original symbol magic, this is necessary in order to ensure
-    # the semantic pass is correct
-    s.magic = b.magic
-    if b.typ != nil and b.typ.len > 0 and s.name.s notin ["[]", "[]="]:
+    # the semantic pass is correct, but bracket ops should stay non-magic for
+    # overload resolution on distinct types.
+    if not isBracketOp:
+      s.magic = b.magic
+    if b.typ != nil and b.typ.len > 0 and not isBracketOp:
       s.typ.n[0] = b.typ.n[0]
     s.typ.flags = b.typ.flags
-    if s.name.s in ["[]", "[]="]:
+    if isBracketOp:
       var paramType = s.typ.firstParamType
       if paramType != nil:
-        paramType = paramType.skipTypes({tyVar, tyLent, tyPtr, tyRef, tyOwned, tyAlias, tyGenericInst, tySink})
-        if paramType.kind == tyDistinct:
+        paramType = paramType.skipTypes({tyVar, tyLent, tyPtr, tyRef, tyOwned,
+                                         tyAlias, tySink})
+        case paramType.kind
+        of tyDistinct:
           incl(paramType, tfBorrowBrackets)
+        of tyGenericInvocation:
+          if paramType.genericHead.last.kind == tyDistinct:
+            incl(paramType.genericHead.last, tfBorrowBrackets)
+        else:
+          discard
   of bsNoDistinct:
     localError(c.config, n.info, "borrow proc without distinct type parameter is meaningless")
   of bsReturnNotMatch:

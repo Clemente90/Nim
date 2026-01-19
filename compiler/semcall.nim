@@ -1034,6 +1034,12 @@ proc searchForBorrowProc(c: PContext, startScope: PScope, fn: PSym): tuple[s: PS
       t
 
   result = default(tuple[s: PSym, state: TBorrowState])
+  let opName = fn.name.s
+  var isBracketOp = false
+  for ch in opName:
+    if ch == '[':
+      isBracketOp = true
+      break
   var call = newNodeI(nkCall, fn.info)
   var hasDistinct = false
   var isDistinct: bool
@@ -1052,8 +1058,7 @@ proc searchForBorrowProc(c: PContext, startScope: PScope, fn: PSym): tuple[s: PS
     ]#
     let rawType = skipTypes(param.typ, desiredTypes)
     if rawType.kind == tyGenericInvocation and rawType.genericHead.last.kind == tyDistinct:
-      let name = fn.name.s
-      if name notin ["[]", "[]="]:
+      if not isBracketOp:
         result.state = bsGeneric
         return
     t = skipTypes(param.typ, desiredTypes + {tyGenericInvocation})
@@ -1075,7 +1080,7 @@ proc searchForBorrowProc(c: PContext, startScope: PScope, fn: PSym): tuple[s: PS
     if resolved != nil:
       result.s = resolved[0].sym
       result.state = bsMatch
-      if result.s.magic notin {mArrGet, mArrPut} and
+      if not isBracketOp and result.s.magic notin {mArrGet, mArrPut} and
           not compareTypes(result.s.typ.returnType, fn.typ.returnType, dcEqIgnoreDistinct, {IgnoreFlags}):
         result.state = bsReturnNotMatch
   else:
