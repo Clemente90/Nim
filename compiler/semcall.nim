@@ -1070,12 +1070,46 @@ proc searchForBorrowProc(c: PContext, startScope: PScope, fn: PSym): tuple[s: PS
     s.info = param.info
     call.add(newSymNode(s))
   if hasDistinct:
+    proc hasDistinctParams(typ: PType): bool =
+      if typ == nil or typ.n == nil:
+        return false
+      for i in 1..<typ.n.len:
+        var paramType = typ.n[i].typ
+        if paramType != nil:
+          paramType = paramType.skipTypes({tyVar, tyLent, tyPtr, tyRef, tyOwned, tyAlias,
+                                           tyGenericInst, tySink})
+          if paramType.kind == tyDistinct or
+              (paramType.kind == tyGenericInvocation and
+               paramType.genericHead.last.kind == tyDistinct):
+            return true
+      result = false
+
     let filter = if fn.kind in {skProc, skFunc}: {skProc, skFunc} else: {fn.kind}
+    if fn.name.s in ["[]", "[]="]:
+      var o: TOverloadIter = default(TOverloadIter)
+      var symx = initOverloadIter(o, c, call[0])
+      while symx != nil:
+        if symx.kind in filter and symx.id != fn.id and sfBorrow notin symx.flags and
+            not hasDistinctParams(symx.typ):
+          var m = newCandidate(c, symx, nil)
+          var matches = true
+          for i in 1..<fn.typ.n.len:
+            let formal = symx.typ.n[i].typ
+            let argNode = call[i]
+            if paramTypesMatch(m, formal, argNode.typ, argNode, nil) == nil:
+              matches = false
+              break
+          if matches:
+            result.s = symx
+            result.state = bsMatch
+            return
+        symx = nextOverloadIter(o, c, call[0])
     var resolved = semOverloadedCall(c, call, call, filter, {})
     if resolved != nil:
       result.s = resolved[0].sym
       result.state = bsMatch
-      if result.s.magic notin {mArrGet, mArrPut} and
+      let isBracketOp = fn.name.s in ["[]", "[]="]
+      if not isBracketOp and result.s.magic notin {mArrGet, mArrPut} and
           not compareTypes(result.s.typ.returnType, fn.typ.returnType, dcEqIgnoreDistinct, {IgnoreFlags}):
         result.state = bsReturnNotMatch
   else:
