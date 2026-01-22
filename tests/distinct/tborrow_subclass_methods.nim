@@ -29,7 +29,7 @@ proc describe(dog: DistinctDog2): string {.borrow.}
 static:
   # Borrowing methods on distinct types is not supported; ensure the compiler rejects it.
   doAssert not compiles((block:
-    proc kind(animal: DistinctAnimal): string {.borrow.}
+    method kind(animal: DistinctAnimal): string {.borrow.}
   ))
 
 proc kind(animal: DistinctAnimal): string =
