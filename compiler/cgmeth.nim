@@ -77,15 +77,24 @@ proc sameMethodBucket(a, b: PSym; multiMethods: bool): MethodResult =
     inc i
     var aa = x
     var bb = y
+    var hadDistinct = false
     while true:
       aa = skipTypes(aa, {tyGenericInst, tyAlias})
       bb = skipTypes(bb, {tyGenericInst, tyAlias})
-      if aa.kind == bb.kind and aa.kind in {tyVar, tyPtr, tyRef, tyLent, tySink}:
+      if aa.kind == tyDistinct:
+        hadDistinct = true
+        aa = aa.elementType
+        continue
+      if bb.kind == tyDistinct:
+        hadDistinct = true
+        bb = bb.elementType
+        continue
+      if aa.kind == bb.kind and aa.kind in {tyVar, tyPtr, tyRef, tyLent, tySink, tyOwned}:
         aa = aa.elementType
         bb = bb.elementType
       else:
         break
-    if sameType(x, y):
+    if sameType(x, y) or (hadDistinct and aa.kind == tyObject and bb.kind == tyObject and sameType(aa, bb)):
       if aa.kind == tyObject and result != Invalid:
         result = Yes
     elif aa.kind == tyObject and bb.kind == tyObject and (i == 1 or multiMethods):

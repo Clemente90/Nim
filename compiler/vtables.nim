@@ -82,6 +82,34 @@ proc containGenerics(base: PType, s: seq[tuple[depth: int, value: PType]]): bool
       break
 
 proc collectVTableDispatchers*(g: ModuleGraph) =
+  proc unwrapDistinctObject(t: PType): PType =
+    result = t
+    while result != nil and result.kind == tyDistinct:
+      result = result.elementType
+    result = result.skipTypes(skipPtrs-{tyTypeDesc})
+
+  proc resolveBorrowedMethod(s: PSym): PSym =
+    result = s
+    while sfBorrow in result.flags:
+      let body = getBody(g, result)
+      if body.kind == nkSym:
+        result = body.sym
+      else:
+        break
+
+  proc ensureBucketCount(baseType: PType): int =
+    if baseType.itemId in g.bucketTable:
+      return g.bucketTable[baseType.itemId]
+    var count = 0
+    for bucket in 0..<g.methods.len:
+      let candidate = unwrapDistinctObject(g.methods[bucket].methods[^1].typ.firstParamType)
+      if sameObjectTypes(candidate, baseType):
+        inc count
+    if count == 0:
+      count = 1
+    g.bucketTable[baseType.itemId] = count
+    result = count
+
   var itemTable = initTable[ItemId, seq[PSym]]()
   var rootTypeSeq = newSeq[PType]()
   var rootItemIdCount = initCountTable[ItemId]()
@@ -90,9 +118,9 @@ proc collectVTableDispatchers*(g: ModuleGraph) =
     if relevantCol(g.methods[bucket].methods, 1): incl(relevantCols, 1)
     sortBucket(g.methods[bucket].methods, relevantCols)
     let base = g.methods[bucket].methods[^1]
-    let baseType = base.typ.firstParamType.skipTypes(skipPtrs-{tyTypeDesc})
+    let baseType = unwrapDistinctObject(base.typ.firstParamType)
     if baseType.itemId in g.objectTree and not containGenerics(baseType, g.objectTree[baseType.itemId]):
-      let methodIndexLen = g.bucketTable[baseType.itemId]
+      let methodIndexLen = ensureBucketCount(baseType)
       if baseType.itemId notin itemTable: # once is enough
         rootTypeSeq.add baseType
         itemTable[baseType.itemId] = newSeq[PSym](methodIndexLen)
@@ -113,13 +141,41 @@ proc collectVTableDispatchers*(g: ModuleGraph) =
         mIndex = rootItemIdCount[baseType.itemId]
         rootItemIdCount.inc(baseType.itemId)
       for idx in 0..<g.methods[bucket].methods.len:
-        let obj = g.methods[bucket].methods[idx].typ.firstParamType.skipTypes(skipPtrs)
-        itemTable[obj.itemId][mIndex] = g.methods[bucket].methods[idx]
+        let obj = unwrapDistinctObject(g.methods[bucket].methods[idx].typ.firstParamType)
+        itemTable[obj.itemId][mIndex] = resolveBorrowedMethod(g.methods[bucket].methods[idx])
       g.addDispatchers genVTableDispatcher(g, g.methods[bucket].methods, mIndex)
     else: # if the base object doesn't have this method
       g.addDispatchers genIfDispatcher(g, g.methods[bucket].methods, relevantCols, g.idgen)
 
 proc sortVTableDispatchers*(g: ModuleGraph) =
+  proc unwrapDistinctObject(t: PType): PType =
+    result = t
+    while result != nil and result.kind == tyDistinct:
+      result = result.elementType
+    result = result.skipTypes(skipPtrs-{tyTypeDesc})
+
+  proc resolveBorrowedMethod(s: PSym): PSym =
+    result = s
+    while sfBorrow in result.flags:
+      let body = getBody(g, result)
+      if body.kind == nkSym:
+        result = body.sym
+      else:
+        break
+
+  proc ensureBucketCount(baseType: PType): int =
+    if baseType.itemId in g.bucketTable:
+      return g.bucketTable[baseType.itemId]
+    var count = 0
+    for bucket in 0..<g.methods.len:
+      let candidate = unwrapDistinctObject(g.methods[bucket].methods[^1].typ.firstParamType)
+      if sameObjectTypes(candidate, baseType):
+        inc count
+    if count == 0:
+      count = 1
+    g.bucketTable[baseType.itemId] = count
+    result = count
+
   var itemTable = initTable[ItemId, seq[PSym]]()
   var rootTypeSeq = newSeq[ItemId]()
   var rootItemIdCount = initCountTable[ItemId]()
@@ -128,9 +184,9 @@ proc sortVTableDispatchers*(g: ModuleGraph) =
     if relevantCol(g.methods[bucket].methods, 1): incl(relevantCols, 1)
     sortBucket(g.methods[bucket].methods, relevantCols)
     let base = g.methods[bucket].methods[^1]
-    let baseType = base.typ.firstParamType.skipTypes(skipPtrs-{tyTypeDesc})
+    let baseType = unwrapDistinctObject(base.typ.firstParamType)
     if baseType.itemId in g.objectTree and not containGenerics(baseType, g.objectTree[baseType.itemId]):
-      let methodIndexLen = g.bucketTable[baseType.itemId]
+      let methodIndexLen = ensureBucketCount(baseType)
       if baseType.itemId notin itemTable: # once is enough
         rootTypeSeq.add baseType.itemId
         itemTable[baseType.itemId] = newSeq[PSym](methodIndexLen)
@@ -151,8 +207,8 @@ proc sortVTableDispatchers*(g: ModuleGraph) =
         mIndex = rootItemIdCount[baseType.itemId]
         rootItemIdCount.inc(baseType.itemId)
       for idx in 0..<g.methods[bucket].methods.len:
-        let obj = g.methods[bucket].methods[idx].typ.firstParamType.skipTypes(skipPtrs)
-        itemTable[obj.itemId][mIndex] = g.methods[bucket].methods[idx]
+        let obj = unwrapDistinctObject(g.methods[bucket].methods[idx].typ.firstParamType)
+        itemTable[obj.itemId][mIndex] = resolveBorrowedMethod(g.methods[bucket].methods[idx])
 
   for baseType in rootTypeSeq:
     g.setMethodsPerType(baseType, itemTable[baseType])

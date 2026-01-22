@@ -2374,11 +2374,23 @@ proc cursorInProc(conf: ConfigRef; n: PNode): bool =
   else:
     result = false
 
+proc methodParamBaseType(t: PType): PType =
+  result = t
+  while result != nil:
+    result = skipTypes(result, {tyVar, tyLent, tyAlias, tySink, tyGenericInst, tyGenericInvocation})
+    if result.kind == tyDistinct:
+      result = result.elementType
+      continue
+    if result.kind in {tyPtr, tyRef, tyOwned}:
+      result = result.elementType
+      continue
+    break
+
 proc hasObjParam(s: PSym): bool =
   result = false
   var t = s.typ
   for col in 1..<t.len:
-    if skipTypes(t[col], skipPtrs).kind == tyObject:
+    if methodParamBaseType(t[col]).kind == tyObject:
       return true
 
 proc finishMethod(c: PContext, s: PSym) =
