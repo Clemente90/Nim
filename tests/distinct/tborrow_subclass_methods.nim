@@ -1,7 +1,8 @@
+# Section: Borrowed methods on distinct subtypes preserve dynamic dispatch.
 type
-  Animal = object of RootObj
+  Animal = ref object of RootObj
     name: string
-  Dog = object of Animal
+  Dog = ref object of Animal
     age: int
 
 proc describe(animal: Animal): string =
@@ -10,10 +11,10 @@ proc describe(animal: Animal): string =
 proc describe(dog: Dog): string =
   "dog:" & dog.name & ":" & $dog.age
 
-proc kind(animal: Animal): string =
+method kind(animal: Animal): string {.base.} =
   "animal"
 
-proc kind(dog: Dog): string =
+method kind(dog: Dog): string =
   "dog"
 
 type
@@ -25,14 +26,25 @@ proc describe(animal: DistinctAnimal): string {.borrow.}
 proc describe(dog: DistinctDog): string {.borrow.}
 proc describe(dog: DistinctDog2): string {.borrow.}
 
-proc kind(animal: DistinctAnimal): string {.borrow.}
-proc kind(dog: DistinctDog): string {.borrow.}
-proc kind(dog: DistinctDog2): string {.borrow.}
+static:
+  # Borrowing methods on distinct types is not supported; ensure the compiler rejects it.
+  doAssert not compiles((block:
+    proc kind(animal: DistinctAnimal): string {.borrow.}
+  ))
 
+proc kind(animal: DistinctAnimal): string =
+  kind(Animal(animal))
+proc kind(dog: DistinctDog): string =
+  kind(Dog(dog))
+proc kind(dog: DistinctDog2): string =
+  kind(Dog(DistinctDog(dog)))
+
+# Section: Distinct wrappers forward method overloads and casts.
 let dog = Dog(name: "Rex", age: 5)
 let distinctDog = DistinctDog(dog)
 let distinctDog2 = DistinctDog2(distinctDog)
-let distinctAnimal = DistinctAnimal(Animal(dog))
+let distinctAnimal = DistinctAnimal(Animal(name: "Rex"))
+let distinctAnimalFromDog = DistinctAnimal(Animal(dog))
 
 doAssert describe(distinctDog) == "dog:Rex:5"
 doAssert describe(distinctDog2) == "dog:Rex:5"
@@ -41,6 +53,7 @@ doAssert describe(distinctAnimal) == "animal:Rex"
 doAssert kind(distinctDog) == "dog"
 doAssert kind(distinctDog2) == "dog"
 doAssert kind(distinctAnimal) == "animal"
+doAssert kind(distinctAnimalFromDog) == "dog"
 
 let backDog = Dog(distinctDog)
 let backDog2 = Dog(DistinctDog(distinctDog2))
@@ -52,6 +65,6 @@ doAssert backDog2.age == 5
 
 doAssert backAnimal.name == "Rex"
 
-let distinctAnimalFromDog = DistinctAnimal(Animal(Dog(distinctDog)))
+let distinctAnimalFromDistinctDog = DistinctAnimal(Animal(Dog(distinctDog)))
 
-doAssert describe(distinctAnimalFromDog) == "animal:Rex"
+doAssert describe(distinctAnimalFromDistinctDog) == "animal:Rex"
