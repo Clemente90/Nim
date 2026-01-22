@@ -1440,6 +1440,12 @@ proc inheritanceDiff*(a, b: PType): int =
   # | returns: -x iff `a` is the x'th direct superclass of `b`
   # | returns: +x iff `a` is the x'th direct subclass of `b`
   # | returns: `maxint` iff `a` and `b` are not compatible at all
+  var a = a
+  var b = b
+  while a != nil and a.kind == tyDistinct:
+    a = a.elementType
+  while b != nil and b.kind == tyDistinct:
+    b = b.elementType
   if a == b or a.kind == tyError or b.kind == tyError: return 0
   assert a.kind in {tyObject} + skipPtrs
   assert b.kind in {tyObject} + skipPtrs
